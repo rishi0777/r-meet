@@ -1,9 +1,20 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { v4 as uuidV4 } from "uuid";
+import Image from "next/image";
+import { Text } from "@rms-forge/ui-text";
+import { Toast } from "@rms-forge/ui-toast";
+import { useRouter } from "next/navigation";
 import { Header } from "@rms-forge/ui-header";
+import { COLOR_SCHEME } from "@lib/constants";
 import { Footer } from "@rms-forge/ui-footer";
-import { Form, type FormInnerFunctions } from "@rms-forge/ui-form";
+import { Button } from "@rms-forge/ui-button";
+import { Divider } from "@rms-forge/ui-divider";
+import { Container } from "@rms-forge/ui-container";
+import { Input } from "@rms-forge/ui-controlled-components";
+import { type FormInnerFunctions } from "@rms-forge/ui-form";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { InputFieldEntity } from "@rms-forge/ui-form/dist/components/InputField";
 import {
   IconAlert,
   IconChevronLeft,
@@ -12,21 +23,14 @@ import {
   IconMyBrand,
   IconUser,
 } from "@rms-forge/ui-icons";
-import { Text } from "@rms-forge/ui-text";
-import { Toast } from "@rms-forge/ui-toast";
-import { COLOR_SCHEME } from "@lib/constants";
-import {
-  InputField,
-  InputFieldEntity,
-} from "@rms-forge/ui-form/dist/components/InputField";
 import { useDeviceType } from "@rms-forge/ui-utils";
 import { mockFooterData } from "@lib/Mock/footerMockApi";
-import { SocketProvider, useSocket } from "@lib/context/SocketProvider";
-import { Divider } from "@rms-forge/ui-divider";
-import { Button } from "@rms-forge/ui-button";
-import { Input } from "@rms-forge/ui-controlled-components";
-import Image from "next/image";
-import { Container } from "@rms-forge/ui-container";
+import { useSocket } from "components/context/SocketProvider";
+
+export type NewMeetData = {
+  email: string;
+  newMeetId: string;
+};
 
 const Lobby = () => {
   const imageSlides = [
@@ -50,6 +54,7 @@ const Lobby = () => {
     },
   ];
 
+  const router = useRouter();
   const socket = useSocket();
   const { isDesktop } = useDeviceType({ breakpoint: "928px" });
   const toast = useRef<Toast | null>(null);
@@ -113,15 +118,49 @@ const Lobby = () => {
     footerRef.current?.setIsLoading(false);
   };
 
-  const handleNewMeet = useCallback(() => {
-    console.log(socket);
-    // socket.emit("meet:join", { loggedInUser });
-  }, [socket, loggedInUser]);
+  const handleNewMeetRedirect = useCallback(
+    (data: NewMeetData) => {
+      router.push(`/meet/${data.newMeetId}`);
+    },
+    [router]
+  );
 
-  const handleMeetJoin = useCallback(() => {}, []);
+  const handleMeetClick = useCallback(
+    (event: "New" | "Join") => {
+      if (socket && loggedInUser) {
+        if (event === "New") {
+          socket.emit("meet:join", {
+            email: loggedInUser.userEmail,
+            newMeetId: uuidV4(),
+          });
+        } else {
+          socket.emit("meet:join", {
+            email: loggedInUser.userEmail,
+            newMeetId: meetId,
+          });
+          // router.push(`/meet/${meetId}`);
+        }
+      } else if (!loggedInUser) {
+        window.location.href = "https://nytestash.vercel.app/user/login";
+      } else if (!socket) {
+        console.log("Wait!!..Server Error");
+      }
+    },
+    [socket, meetId, loggedInUser, router]
+  );
+
+  useEffect(() => {
+    if (socket) {
+      socket.on("meet:join", handleNewMeetRedirect);
+
+      return () => {
+        socket.off("meet:join", handleNewMeetRedirect);
+      };
+    }
+  }, [socket, handleNewMeetRedirect]);
 
   return (
-    <SocketProvider>
+    <>
       <Header
         activeLink=""
         fixHeader={true}
@@ -187,7 +226,9 @@ const Lobby = () => {
                 size="medium"
                 color="danger"
                 fullWidth
-                onClick={handleNewMeet}
+                onClick={() => {
+                  handleMeetClick("New");
+                }}
               >
                 New Meet
               </Button>
@@ -218,7 +259,9 @@ const Lobby = () => {
                 variant="hollow"
                 size="medium"
                 color="danger"
-                onClick={handleMeetJoin}
+                onClick={() => {
+                  handleMeetClick("Join");
+                }}
                 fullWidth
               >
                 Join
@@ -297,7 +340,7 @@ const Lobby = () => {
         ref={footerRef}
         onGetInTouchFormSubmit={clickedGetInTouch}
       />
-    </SocketProvider>
+    </>
   );
 };
 
